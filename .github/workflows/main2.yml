@@ -1,4 +1,6 @@
 name: AWS OIDC Test II
+run-name: ${{ github.event.inputs.workflow_name || 'AWS OIDC Test II' }}
+
 on:
   workflow_dispatch:
     inputs:
