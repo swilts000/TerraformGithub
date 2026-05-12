@@ -1,0 +1,16 @@
+{
+    "repository": {
+        "repositoryArn": "arn:aws:ecr:us-east-2:391119427586:repository/hello",
+        "registryId": "391119427586",
+        "repositoryName": "hello",
+        "repositoryUri": "391119427586.dkr.ecr.us-east-2.amazonaws.com/hello",
+        "createdAt": "2026-05-12T18:20:14.233000+00:00",
+        "imageTagMutability": "MUTABLE",
+        "imageScanningConfiguration": {
+            "scanOnPush": false
+        },
+        "encryptionConfiguration": {
+            "encryptionType": "AES256"
+        }
+    }
+}
