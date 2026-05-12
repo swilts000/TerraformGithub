@@ -1,0 +1,101 @@
+name: AWS OIDC Test III - With Output
+# run-name: ${{ github.event.inputs.workflow_name || 'AWS OIDC Test III - With Output' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_name:
+        description: 'Custom name for this workflow run'
+        required: false
+        default: 'AWS OIDC Test III - With Output'
+        type: string
+      ecr_name:
+        description: 'ECR repository name (used for create and delete)'
+        required: false
+        default: 'repoforgithub'
+        type: string
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - create
+          - count
+          - delete
+      file_name:
+        description: 'Base name for output files (e.g. myrun → myrun_create.txt)'
+        required: false
+        default: 'ecr'
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  ecr-management:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::391119427586:role/GitHub_Actions_Access
+          aws-region: us-east-2
+
+      - name: Create ECR Repository
+        id: create
+        if: ${{ github.event.inputs.action == 'create' }}
+        run: |
+          OUTPUT_FILE="${{ github.event.inputs.file_name }}_create.txt"
+          aws ecr create-repository --repository-name "${{ github.event.inputs.ecr_name }}" 2>&1 | tee "$OUTPUT_FILE"
+          REPO_URL=$(aws ecr describe-repositories --repository-names "${{ github.event.inputs.ecr_name }}" --query 'repositories[0].repositoryUri' --output text)
+          echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
+
+      - name: Count ECR Repositories
+        id: count
+        if: ${{ github.event.inputs.action == 'count' }}
+        run: |
+          OUTPUT_FILE="${{ github.event.inputs.file_name }}_count.txt"
+          COUNT=$(aws ecr describe-repositories --query 'length(repositories)' --output text)
+          NAMES=$(aws ecr describe-repositories --query 'repositories[*].repositoryName' --output text | tr '\t' '\n')
+          {
+            echo "Total ECR Repositories: $COUNT"
+            echo ""
+            echo "Repository Names:"
+            echo "$NAMES"
+          } | tee "$OUTPUT_FILE"
+          echo "repo_count=$COUNT" >> $GITHUB_OUTPUT
+
+      - name: Delete ECR Repository
+        id: delete
+        if: ${{ github.event.inputs.action == 'delete' }}
+        run: |
+          OUTPUT_FILE="${{ github.event.inputs.file_name }}_delete.txt"
+          aws ecr delete-repository --repository-name "${{ github.event.inputs.ecr_name }}" --force 2>&1 | tee "$OUTPUT_FILE"
+          echo "delete_result=success" >> $GITHUB_OUTPUT
+
+      - name: Write Job Summary
+        if: always()
+        run: |
+          echo "## ECR Action Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ github.event.inputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ECR Name | ${{ github.event.inputs.ecr_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repo URL | ${{ steps.create.outputs.repo_url || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repo Count | ${{ steps.count.outputs.repo_count || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Region | us-east-2 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Output File | ${{ github.event.inputs.file_name }}_${{ github.event.inputs.action }}.txt |" >> $GITHUB_STEP_SUMMARY
+
+          for suffix in create count delete; do
+            FILE="${{ github.event.inputs.file_name }}_${suffix}.txt"
+            if [ -f "$FILE" ]; then
+              echo "## ${suffix^} Output" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              cat "$FILE" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            fi
+          done
