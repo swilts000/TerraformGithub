@@ -38,6 +38,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -120,5 +122,5 @@ jobs:
             echo "No output files to commit."
           else
             git commit -m "chore: add ECR ${{ github.event.inputs.action }} output [${{ steps.setup.outputs.timestamp }}]"
-            git push
+            git push origin HEAD
           fi
