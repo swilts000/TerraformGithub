@@ -48,7 +48,7 @@ jobs:
       - name: Setup Output Folder
         id: setup
         run: |
-          mkdir -p outputs
+          mkdir -p Outputs
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
           echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
 
@@ -56,7 +56,7 @@ jobs:
         id: create
         if: ${{ github.event.inputs.action == 'create' }}
         run: |
-          OUTPUT_FILE="outputs/${{ github.event.inputs.file_name }}_create_${{ steps.setup.outputs.timestamp }}.txt"
+          OUTPUT_FILE="Outputs/${{ github.event.inputs.file_name }}_create_${{ steps.setup.outputs.timestamp }}.txt"
           aws ecr create-repository --repository-name "${{ github.event.inputs.ecr_name }}" 2>&1 | tee "$OUTPUT_FILE"
           REPO_URL=$(aws ecr describe-repositories --repository-names "${{ github.event.inputs.ecr_name }}" --query 'repositories[0].repositoryUri' --output text)
           echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
@@ -66,7 +66,7 @@ jobs:
         id: count
         if: ${{ github.event.inputs.action == 'count' }}
         run: |
-          OUTPUT_FILE="outputs/${{ github.event.inputs.file_name }}_count_${{ steps.setup.outputs.timestamp }}.txt"
+          OUTPUT_FILE="Outputs/${{ github.event.inputs.file_name }}_count_${{ steps.setup.outputs.timestamp }}.txt"
           COUNT=$(aws ecr describe-repositories --query 'length(repositories)' --output text)
           NAMES=$(aws ecr describe-repositories --query 'repositories[*].repositoryName' --output text | tr '\t' '\n')
           {
@@ -82,7 +82,7 @@ jobs:
         id: delete
         if: ${{ github.event.inputs.action == 'delete' }}
         run: |
-          OUTPUT_FILE="outputs/${{ github.event.inputs.file_name }}_delete_${{ steps.setup.outputs.timestamp }}.txt"
+          OUTPUT_FILE="Outputs/${{ github.event.inputs.file_name }}_delete_${{ steps.setup.outputs.timestamp }}.txt"
           aws ecr delete-repository --repository-name "${{ github.event.inputs.ecr_name }}" --force 2>&1 | tee "$OUTPUT_FILE"
           echo "delete_result=success" >> $GITHUB_OUTPUT
           echo "output_file=$OUTPUT_FILE" >> $GITHUB_OUTPUT
@@ -101,7 +101,7 @@ jobs:
           echo "| Output File | ${{ steps.create.outputs.output_file || steps.count.outputs.output_file || steps.delete.outputs.output_file || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
 
           for suffix in create count delete; do
-            FILE="outputs/${{ github.event.inputs.file_name }}_${suffix}_${{ steps.setup.outputs.timestamp }}.txt"
+            FILE="Outputs/${{ github.event.inputs.file_name }}_${suffix}_${{ steps.setup.outputs.timestamp }}.txt"
             if [ -f "$FILE" ]; then
               echo "## ${suffix^} Output" >> $GITHUB_STEP_SUMMARY
               echo '```' >> $GITHUB_STEP_SUMMARY
