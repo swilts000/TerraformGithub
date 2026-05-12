@@ -21,11 +21,11 @@ jobs:
 
       - name: Create Test ECR Repo
         run: |
-          aws ecr create-repository --repository-name oidc-test-repo
+          aws ecr create-repository --repository-name oidc-test-repoii
 
-      - name: List Repos (Verification)
-        run: |
-          aws ecr describe-repositories --repository-names oidc-test-repo
+      # - name: List Repos (Verification)
+      #   run: |
+      #     aws ecr describe-repositories --repository-names oidc-test-repo
 
       - name: Count ECR Repos
         run: |
