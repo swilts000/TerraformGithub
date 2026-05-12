@@ -1,9 +1,14 @@
-name: AWS OIDC Test II
-run-name: ${{ github.event.inputs.workflow_name || 'AWS OIDC Test II' }}
+name: AWS OIDC Test II - With Output
+run-name: ${{ github.event.inputs.workflow_name || 'AWS OIDC Test II - With Output' }}
 
 on:
   workflow_dispatch:
     inputs:
+      workflow_name:
+        description: 'Custom name for this workflow run'
+        required: false
+        default: 'AWS OIDC Test II - With Output'
+        type: string
       ecr_name:
         description: 'ECR repository name'
         required: true
@@ -17,6 +22,11 @@ on:
           - plan
           - apply
           - destroy
+      file_name:
+        description: 'Base name for output files (e.g. myrun → myrun_apply.txt)'
+        required: false
+        default: 'terraform'
+        type: string
 
 permissions:
   id-token: write
@@ -42,13 +52,45 @@ jobs:
         run: terraform init
 
       - name: Terraform Plan
+        id: plan
         if: ${{ github.event.inputs.action == 'plan' }}
-        run: terraform plan -var="ecr_name=${{ github.event.inputs.ecr_name }}"
+        run: |
+          terraform plan -var="ecr_name=${{ github.event.inputs.ecr_name }}" 2>&1 | tee ${{ github.event.inputs.file_name }}_plan.txt
+          echo "plan_result=success" >> $GITHUB_OUTPUT
 
       - name: Terraform Apply
+        id: apply
         if: ${{ github.event.inputs.action == 'apply' }}
-        run: terraform apply -auto-approve -var="ecr_name=${{ github.event.inputs.ecr_name }}"
+        run: |
+          terraform apply -auto-approve -var="ecr_name=${{ github.event.inputs.ecr_name }}" 2>&1 | tee ${{ github.event.inputs.file_name }}_apply.txt
+          REPO_URL=$(terraform output -raw repository_url)
+          echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
 
       - name: Terraform Destroy
+        id: destroy
         if: ${{ github.event.inputs.action == 'destroy' }}
-        run: terraform destroy -auto-approve -var="ecr_name=${{ github.event.inputs.ecr_name }}"
+        run: |
+          terraform destroy -auto-approve -var="ecr_name=${{ github.event.inputs.ecr_name }}" 2>&1 | tee ${{ github.event.inputs.file_name }}_destroy.txt
+          echo "destroy_result=success" >> $GITHUB_OUTPUT
+
+      - name: Write Job Summary
+        if: always()
+        run: |
+          echo "## Terraform Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ github.event.inputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ECR Name | ${{ github.event.inputs.ecr_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repo URL | ${{ steps.apply.outputs.repo_url || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Region | us-east-2 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Output File | ${{ github.event.inputs.file_name }}_${{ github.event.inputs.action }}.txt |" >> $GITHUB_STEP_SUMMARY
+
+          for suffix in apply plan destroy; do
+            FILE="${{ github.event.inputs.file_name }}_${suffix}.txt"
+            if [ -f "$FILE" ]; then
+              echo "## ${suffix^} Output" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              cat "$FILE" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            fi
+          done
