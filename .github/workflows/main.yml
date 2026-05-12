@@ -1,4 +1,4 @@
-name: AWS OIDC Test II
+name: AWS OIDC Test I
 on:
   workflow_dispatch: # Allows you to run this manually from the "Actions" tab
 
