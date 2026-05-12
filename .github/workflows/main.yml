@@ -20,17 +20,36 @@ jobs:
           aws-region: us-east-2 # Replace with your preferred region
 
       - name: Create Test ECR Repo
+        id: create_repo
         run: |
-          aws ecr create-repository --repository-name oidc-test-repoii
+          RESULT=$(aws ecr create-repository --repository-name oidc-test-repoii --output json)
+          REPO_URL=$(echo $RESULT | jq -r '.repository.repositoryUri')
+          echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
 
-      # - name: List Repos (Verification)
-      #   run: |
-      #     aws ecr describe-repositories --repository-names oidc-test-repo
+      - name: List Repos (Verification)
+        run: |
+          aws ecr describe-repositories --repository-names oidc-test-repo
 
       - name: Count ECR Repos
+        id: count_repos
         run: |
           COUNT=$(aws ecr describe-repositories --query 'length(repositories)' --output text)
-          echo "Total ECR repositories: $COUNT"
+          echo "repo_count=$COUNT" >> $GITHUB_OUTPUT
+      
+      - name: Print Outputs
+        run: |
+          echo "Repo URL: ${{ steps.create_repo.outputs.repo_url }}"
+          echo "Total Repos: ${{ steps.count_repos.outputs.repo_count }}"   
+      
+          
+      - name: Write Job Summary
+        run: |
+          echo "## ECR Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Repo URL | ${{ steps.create_repo.outputs.repo_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Total Repos | ${{ steps.count_repos.outputs.repo_count }} |" >> $GITHUB_STEP_SUMMARY
+          
       # - name: Delete Test ECR Repo
       #   if: always() # Ensures cleanup even if the creation or list steps fail
       #   run: |
