@@ -1,5 +1,5 @@
 name: AWS OIDC Test III - Create, Count, Delete, With Output
-# run-name: ${{ github.event.inputs.workflow_name || 'AWS OIDC Test III - With Output' }}
+
 
 on:
   workflow_dispatch:
