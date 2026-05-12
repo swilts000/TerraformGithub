@@ -27,7 +27,7 @@ jobs:
         run: |
           aws ecr describe-repositories --repository-names oidc-test-repo
 
-      - name: Delete Test ECR Repo
-        if: always() # Ensures cleanup even if the creation or list steps fail
-        run: |
-          aws ecr delete-repository --repository-name oidc-test-repo --force
+      # - name: Delete Test ECR Repo
+      #   if: always() # Ensures cleanup even if the creation or list steps fail
+      #   run: |
+      #     aws ecr delete-repository --repository-name oidc-test-repo --force
