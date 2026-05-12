@@ -1,0 +1,16 @@
+{
+    "repository": {
+        "repositoryArn": "arn:aws:ecr:us-east-2:391119427586:repository/hey_man",
+        "registryId": "391119427586",
+        "repositoryName": "hey_man",
+        "repositoryUri": "391119427586.dkr.ecr.us-east-2.amazonaws.com/hey_man",
+        "createdAt": "2026-05-12T17:52:13.655000+00:00",
+        "imageTagMutability": "MUTABLE",
+        "imageScanningConfiguration": {
+            "scanOnPush": false
+        },
+        "encryptionConfiguration": {
+            "encryptionType": "AES256"
+        }
+    }
+}
