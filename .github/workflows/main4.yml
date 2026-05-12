@@ -1,0 +1,175 @@
+name: AWS OIDC Test IIII - Create, Count, Delete, Multiple With Output
+run-name: ${{ github.event.inputs.workflow_name || 'AWS OIDC Test IIII - Multiple With Output' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+    #   workflow_name:
+    #     description: 'Custom name for this workflow run'
+    #     required: false
+    #     default: 'AWS OIDC Test IIII - With Output'
+    #     type: string
+      ecr_name:
+        description: 'ECR repository name (used for create and delete)'
+        required: false
+        default: 'repoforgithub'
+        type: string
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - create
+          - count
+          - delete
+      file_name:
+        description: 'Base name for output files (e.g. myrun → myrun_create.txt)'
+        required: false
+        default: 'ecr'
+        type: string
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  # ── Stage 1: Auth & generate shared variables ─────────────────────────────
+  setup:
+    name: "Stage 1 - Setup & Auth"
+    runs-on: ubuntu-latest
+    outputs:
+      timestamp: ${{ steps.vars.outputs.timestamp }}
+      output_file: ${{ steps.vars.outputs.output_file }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::391119427586:role/GitHub_Actions_Access
+          aws-region: us-east-2
+
+      - name: Set Variables
+        id: vars
+        run: |
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          OUTPUT_FILE="Outputs/${{ github.event.inputs.file_name }}_${{ github.event.inputs.action }}_${TIMESTAMP}.txt"
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "output_file=$OUTPUT_FILE" >> $GITHUB_OUTPUT
+
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
+
+  # ── Stage 2: Execute ECR action ───────────────────────────────────────────
+  ecr-action:
+    name: "Stage 2 - ECR ${{ github.event.inputs.action }}"
+    runs-on: ubuntu-latest
+    needs: setup
+    outputs:
+      repo_url: ${{ steps.create.outputs.repo_url }}
+      repo_count: ${{ steps.count.outputs.repo_count }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::391119427586:role/GitHub_Actions_Access
+          aws-region: us-east-2
+
+      - name: Prepare Output Folder
+        run: mkdir -p Outputs
+
+      - name: Create ECR Repository
+        id: create
+        if: ${{ github.event.inputs.action == 'create' }}
+        run: |
+          OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
+          aws ecr create-repository --repository-name "${{ github.event.inputs.ecr_name }}" 2>&1 | tee "$OUTPUT_FILE"
+          REPO_URL=$(aws ecr describe-repositories --repository-names "${{ github.event.inputs.ecr_name }}" --query 'repositories[0].repositoryUri' --output text)
+          echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
+
+      - name: Count ECR Repositories
+        id: count
+        if: ${{ github.event.inputs.action == 'count' }}
+        run: |
+          OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
+          COUNT=$(aws ecr describe-repositories --query 'length(repositories)' --output text)
+          NAMES=$(aws ecr describe-repositories --query 'repositories[*].repositoryName' --output text | tr '\t' '\n')
+          {
+            echo "Total ECR Repositories: $COUNT"
+            echo ""
+            echo "Repository Names:"
+            echo "$NAMES"
+          } | tee "$OUTPUT_FILE"
+          echo "repo_count=$COUNT" >> $GITHUB_OUTPUT
+
+      - name: Delete ECR Repository
+        id: delete
+        if: ${{ github.event.inputs.action == 'delete' }}
+        run: |
+          OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
+          aws ecr delete-repository --repository-name "${{ github.event.inputs.ecr_name }}" --force 2>&1 | tee "$OUTPUT_FILE"
+
+      - name: Upload Output as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecr-output-${{ needs.setup.outputs.timestamp }}
+          path: Outputs/
+
+  # ── Stage 3: Commit output file to repo & write job summary ───────────────
+  save-and-report:
+    name: "Stage 3 - Save & Report"
+    runs-on: ubuntu-latest
+    needs: [setup, ecr-action]
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Output Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ecr-output-${{ needs.setup.outputs.timestamp }}
+          path: Outputs/
+
+      - name: Commit Output to Repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Outputs/
+          if git diff --cached --quiet; then
+            echo "No output files to commit."
+          else
+            git commit -m "chore: ECR ${{ github.event.inputs.action }} output [${{ needs.setup.outputs.timestamp }}]"
+            git push origin HEAD
+          fi
+
+      - name: Write Job Summary
+        run: |
+          echo "## ECR Multistage Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ github.event.inputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ECR Name | ${{ github.event.inputs.ecr_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repo URL | ${{ needs.ecr-action.outputs.repo_url || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repo Count | ${{ needs.ecr-action.outputs.repo_count || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Region | us-east-2 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Output File | ${{ needs.setup.outputs.output_file }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Timestamp | ${{ needs.setup.outputs.timestamp }} |" >> $GITHUB_STEP_SUMMARY
+
+          OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
+          if [ -f "$OUTPUT_FILE" ]; then
+            echo "## Output" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat "$OUTPUT_FILE" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
