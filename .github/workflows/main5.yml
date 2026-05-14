@@ -112,45 +112,35 @@ jobs:
           } | tee "$OUTPUT_FILE"
           echo "repo_count=$COUNT" >> $GITHUB_OUTPUT
 
-      - name: Import existing ECR repository (if any)
-        if: ${{ github.event.inputs.action == 'create' }}
-        run: |
-          ECR_NAME="${{ needs.setup.outputs.ecr_name }}"
-          if aws ecr describe-repositories --repository-names "$ECR_NAME" > /dev/null 2>&1; then
-            echo "Repository '$ECR_NAME' already exists — importing into Terraform state."
-            terraform import -var="ecr_name=$ECR_NAME" aws_ecr_repository.repoGit "$ECR_NAME"
-          fi
-
       - name: Terraform Apply (create)
         id: tf_apply
         if: ${{ github.event.inputs.action == 'create' }}
         run: |
-          terraform apply -auto-approve -var="ecr_name=${{ needs.setup.outputs.ecr_name }}"
-          REPO_URL=$(terraform output -raw repository_url 2>/dev/null || true)
+          ECR_NAME="${{ needs.setup.outputs.ecr_name }}"
           mkdir -p Outputs
           OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
+          if aws ecr describe-repositories --repository-names "$ECR_NAME" > /dev/null 2>&1; then
+            echo "Repository '$ECR_NAME' already exists — skipping create."
+            REPO_URL=$(aws ecr describe-repositories --repository-names "$ECR_NAME" \
+              --query 'repositories[0].repositoryUri' --output text)
+          else
+            terraform apply -auto-approve -var="ecr_name=$ECR_NAME"
+            REPO_URL=$(terraform output -raw repository_url 2>/dev/null || true)
+          fi
           echo "Repository URL: $REPO_URL" | tee "$OUTPUT_FILE"
           echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
 
-      - name: Import ECR repository for destroy (if exists)
+      - name: Delete ECR Repository
         if: ${{ github.event.inputs.action == 'delete' }}
         run: |
           ECR_NAME="${{ needs.setup.outputs.ecr_name }}"
-          if aws ecr describe-repositories --repository-names "$ECR_NAME" > /dev/null 2>&1; then
-            echo "Importing '$ECR_NAME' into Terraform state for destroy."
-            terraform import -var="ecr_name=$ECR_NAME" aws_ecr_repository.repoGit "$ECR_NAME" || true
-          else
-            echo "Repository '$ECR_NAME' does not exist — nothing to destroy."
-            exit 0
-          fi
-
-      - name: Terraform Destroy (delete)
-        if: ${{ github.event.inputs.action == 'delete' }}
-        run: |
-          terraform destroy -auto-approve -var="ecr_name=${{ needs.setup.outputs.ecr_name }}"
           mkdir -p Outputs
           OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
-          echo "Terraform destroy completed" | tee "$OUTPUT_FILE"
+          if aws ecr describe-repositories --repository-names "$ECR_NAME" > /dev/null 2>&1; then
+            aws ecr delete-repository --repository-name "$ECR_NAME" --force 2>&1 | tee "$OUTPUT_FILE"
+          else
+            echo "Repository '$ECR_NAME' does not exist — nothing to delete." | tee "$OUTPUT_FILE"
+          fi
 
       - name: Upload Terraform Output
         uses: actions/upload-artifact@v4
