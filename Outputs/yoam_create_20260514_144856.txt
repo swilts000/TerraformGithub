@@ -1,0 +1,16 @@
+{
+    "repository": {
+        "repositoryArn": "arn:aws:ecr:us-east-2:391119427586:repository/yoman",
+        "registryId": "391119427586",
+        "repositoryName": "yoman",
+        "repositoryUri": "391119427586.dkr.ecr.us-east-2.amazonaws.com/yoman",
+        "createdAt": "2026-05-14T14:49:11.226000+00:00",
+        "imageTagMutability": "MUTABLE",
+        "imageScanningConfiguration": {
+            "scanOnPush": false
+        },
+        "encryptionConfiguration": {
+            "encryptionType": "AES256"
+        }
+    }
+}
