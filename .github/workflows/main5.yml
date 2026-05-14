@@ -67,73 +67,14 @@ jobs:
       - name: Verify AWS Identity
         run: aws sts get-caller-identity
 
-  # ── Stage 2: Execute ECR action ───────────────────────────────────────────
-  ecr-action:
-    name: "Stage 2 - ECR ${{ github.event.inputs.action }}"
-    runs-on: ubuntu-latest
-    needs: setup
-    outputs:
-      repo_url: ${{ steps.create.outputs.repo_url }}
-      repo_count: ${{ steps.count.outputs.repo_count }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::391119427586:role/GitHub_Actions_Access
-          aws-region: us-east-2
-
-      - name: Prepare Output Folder
-        run: mkdir -p Outputs
-
-      - name: Create ECR Repository
-        id: create
-        if: ${{ github.event.inputs.action == 'create' }}
-        run: |
-          OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
-          aws ecr create-repository --repository-name "${{ needs.setup.outputs.ecr_name }}" 2>&1 | tee "$OUTPUT_FILE"
-          REPO_URL=$(aws ecr describe-repositories --repository-names "${{ needs.setup.outputs.ecr_name }}" --query 'repositories[0].repositoryUri' --output text)
-          echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
-
-      - name: Count ECR Repositories
-        id: count
-        if: ${{ github.event.inputs.action == 'count' }}
-        run: |
-          OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
-          COUNT=$(aws ecr describe-repositories --query 'length(repositories)' --output text)
-          NAMES=$(aws ecr describe-repositories --query 'repositories[*].repositoryName' --output text | tr '\t' '\n')
-          {
-            echo "Total ECR Repositories: $COUNT"
-            echo ""
-            echo "Repository Names:"
-            echo "$NAMES"
-          } | tee "$OUTPUT_FILE"
-          echo "repo_count=$COUNT" >> $GITHUB_OUTPUT
-
-      - name: Delete ECR Repository
-        id: delete
-        if: ${{ github.event.inputs.action == 'delete' }}
-        run: |
-          OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
-          aws ecr delete-repository --repository-name "${{ needs.setup.outputs.ecr_name }}" --force 2>&1 | tee "$OUTPUT_FILE"
-
-      - name: Upload Output as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ecr-output-${{ needs.setup.outputs.timestamp }}
-          path: Outputs/
-
-  # ── Stage 2b: Terraform-based ECR (optional) ─────────────────────────────
+  # ── Stage 2: ECR action via Terraform ───────────────────────────────────
   terraform-ecr:
-    name: "Stage 2b - Terraform ECR"
+    name: "Stage 2 - ECR ${{ github.event.inputs.action }} via Terraform"
     runs-on: ubuntu-latest
     needs: setup
     outputs:
       repo_url: ${{ steps.tf_apply.outputs.repo_url }}
+      repo_count: ${{ steps.count.outputs.repo_count }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -155,11 +96,21 @@ jobs:
       - name: Terraform Fmt
         run: terraform fmt || true
 
-      - name: Terraform Plan (count)
+      - name: Count ECR Repositories
+        id: count
         if: ${{ github.event.inputs.action == 'count' }}
         run: |
+          mkdir -p Outputs
           OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
-          terraform plan -no-color | tee "$OUTPUT_FILE"
+          COUNT=$(aws ecr describe-repositories --query 'length(repositories)' --output text)
+          NAMES=$(aws ecr describe-repositories --query 'repositories[*].repositoryName' --output text | tr '\t' '\n')
+          {
+            echo "Total ECR Repositories: $COUNT"
+            echo ""
+            echo "Repository Names:"
+            echo "$NAMES"
+          } | tee "$OUTPUT_FILE"
+          echo "repo_count=$COUNT" >> $GITHUB_OUTPUT
 
       - name: Import existing ECR repository (if any)
         if: ${{ github.event.inputs.action == 'create' }}
@@ -167,7 +118,7 @@ jobs:
           ECR_NAME="${{ needs.setup.outputs.ecr_name }}"
           if aws ecr describe-repositories --repository-names "$ECR_NAME" > /dev/null 2>&1; then
             echo "Repository '$ECR_NAME' already exists — importing into Terraform state."
-            terraform import -var="ecr_name=$ECR_NAME" aws_ecr_repository.repoGit "$ECR_NAME" || true
+            terraform import -var="ecr_name=$ECR_NAME" aws_ecr_repository.repoGit "$ECR_NAME"
           fi
 
       - name: Terraform Apply (create)
@@ -176,14 +127,28 @@ jobs:
         run: |
           terraform apply -auto-approve -var="ecr_name=${{ needs.setup.outputs.ecr_name }}"
           REPO_URL=$(terraform output -raw repository_url 2>/dev/null || true)
+          mkdir -p Outputs
           OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
           echo "Repository URL: $REPO_URL" | tee "$OUTPUT_FILE"
           echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
+
+      - name: Import ECR repository for destroy (if exists)
+        if: ${{ github.event.inputs.action == 'delete' }}
+        run: |
+          ECR_NAME="${{ needs.setup.outputs.ecr_name }}"
+          if aws ecr describe-repositories --repository-names "$ECR_NAME" > /dev/null 2>&1; then
+            echo "Importing '$ECR_NAME' into Terraform state for destroy."
+            terraform import -var="ecr_name=$ECR_NAME" aws_ecr_repository.repoGit "$ECR_NAME" || true
+          else
+            echo "Repository '$ECR_NAME' does not exist — nothing to destroy."
+            exit 0
+          fi
 
       - name: Terraform Destroy (delete)
         if: ${{ github.event.inputs.action == 'delete' }}
         run: |
           terraform destroy -auto-approve -var="ecr_name=${{ needs.setup.outputs.ecr_name }}"
+          mkdir -p Outputs
           OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
           echo "Terraform destroy completed" | tee "$OUTPUT_FILE"
 
@@ -197,7 +162,7 @@ jobs:
   save-and-report:
     name: "Stage 3 - Save & Report"
     runs-on: ubuntu-latest
-    needs: [setup, ecr-action, terraform-ecr]
+    needs: [setup, terraform-ecr]
     if: always()
     steps:
       - name: Checkout repository
@@ -208,7 +173,7 @@ jobs:
       - name: Download Output Artifact
         uses: actions/download-artifact@v4
         with:
-          name: ecr-output-${{ needs.setup.outputs.timestamp }}
+          name: terraform-output-${{ needs.setup.outputs.timestamp }}
           path: Outputs/
 
       - name: Commit Output to Repository
@@ -230,9 +195,8 @@ jobs:
           echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Action | ${{ github.event.inputs.action }} |" >> $GITHUB_STEP_SUMMARY
           echo "| ECR Name | ${{ needs.setup.outputs.ecr_name }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Repo URL | ${{ needs.ecr-action.outputs.repo_url || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Terraform Repo URL | ${{ needs.terraform-ecr.outputs.repo_url || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Repo Count | ${{ needs.ecr-action.outputs.repo_count || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repo URL | ${{ needs.terraform-ecr.outputs.repo_url || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repo Count | ${{ needs.terraform-ecr.outputs.repo_count || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Region | us-east-2 |" >> $GITHUB_STEP_SUMMARY
           echo "| Output File | ${{ needs.setup.outputs.output_file }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Timestamp | ${{ needs.setup.outputs.timestamp }} |" >> $GITHUB_STEP_SUMMARY
