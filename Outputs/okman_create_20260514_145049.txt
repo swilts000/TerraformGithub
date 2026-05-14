@@ -1,0 +1,16 @@
+{
+    "repository": {
+        "repositoryArn": "arn:aws:ecr:us-east-2:391119427586:repository/okman",
+        "registryId": "391119427586",
+        "repositoryName": "okman",
+        "repositoryUri": "391119427586.dkr.ecr.us-east-2.amazonaws.com/okman",
+        "createdAt": "2026-05-14T14:51:05.711000+00:00",
+        "imageTagMutability": "MUTABLE",
+        "imageScanningConfiguration": {
+            "scanOnPush": false
+        },
+        "encryptionConfiguration": {
+            "encryptionType": "AES256"
+        }
+    }
+}
