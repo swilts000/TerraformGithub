@@ -41,6 +41,10 @@ resource "aws_ecr_repository" "repoGit" {
   encryption_configuration {
     encryption_type = "AES256"
   }
+
+  lifecycle {
+    ignore_changes = [tags, tags_all]
+  }
 }
 
 # Output the repository URL so other modules or CI pipelines
