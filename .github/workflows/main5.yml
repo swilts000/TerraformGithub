@@ -161,6 +161,15 @@ jobs:
           OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
           terraform plan -no-color | tee "$OUTPUT_FILE"
 
+      - name: Import existing ECR repository (if any)
+        if: ${{ github.event.inputs.action == 'create' }}
+        run: |
+          ECR_NAME="${{ needs.setup.outputs.ecr_name }}"
+          if aws ecr describe-repositories --repository-names "$ECR_NAME" > /dev/null 2>&1; then
+            echo "Repository '$ECR_NAME' already exists — importing into Terraform state."
+            terraform import -var="ecr_name=$ECR_NAME" aws_ecr_repository.repoGit "$ECR_NAME" || true
+          fi
+
       - name: Terraform Apply (create)
         id: tf_apply
         if: ${{ github.event.inputs.action == 'create' }}
