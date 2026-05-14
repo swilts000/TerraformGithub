@@ -40,6 +40,7 @@ jobs:
     outputs:
       timestamp: ${{ steps.vars.outputs.timestamp }}
       output_file: ${{ steps.vars.outputs.output_file }}
+      ecr_name: ${{ steps.vars.outputs.ecr_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -57,8 +58,11 @@ jobs:
         run: |
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
           OUTPUT_FILE="Outputs/${{ github.event.inputs.file_name }}_${{ github.event.inputs.action }}_${TIMESTAMP}.txt"
+          # Sanitize ECR name: lowercase, replace invalid chars with hyphens, strip leading/trailing hyphens
+          ECR_NAME=$(echo "${{ github.event.inputs.ecr_name }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._/-]/-/g' | sed 's/^-\+//;s/-\+$//')
           echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
           echo "output_file=$OUTPUT_FILE" >> $GITHUB_OUTPUT
+          echo "ecr_name=$ECR_NAME" >> $GITHUB_OUTPUT
 
       - name: Verify AWS Identity
         run: aws sts get-caller-identity
@@ -91,8 +95,8 @@ jobs:
         if: ${{ github.event.inputs.action == 'create' }}
         run: |
           OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
-          aws ecr create-repository --repository-name "${{ github.event.inputs.ecr_name }}" 2>&1 | tee "$OUTPUT_FILE"
-          REPO_URL=$(aws ecr describe-repositories --repository-names "${{ github.event.inputs.ecr_name }}" --query 'repositories[0].repositoryUri' --output text)
+          aws ecr create-repository --repository-name "${{ needs.setup.outputs.ecr_name }}" 2>&1 | tee "$OUTPUT_FILE"
+          REPO_URL=$(aws ecr describe-repositories --repository-names "${{ needs.setup.outputs.ecr_name }}" --query 'repositories[0].repositoryUri' --output text)
           echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
 
       - name: Count ECR Repositories
@@ -115,7 +119,7 @@ jobs:
         if: ${{ github.event.inputs.action == 'delete' }}
         run: |
           OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
-          aws ecr delete-repository --repository-name "${{ github.event.inputs.ecr_name }}" --force 2>&1 | tee "$OUTPUT_FILE"
+          aws ecr delete-repository --repository-name "${{ needs.setup.outputs.ecr_name }}" --force 2>&1 | tee "$OUTPUT_FILE"
 
       - name: Upload Output as Artifact
         uses: actions/upload-artifact@v4
@@ -161,7 +165,7 @@ jobs:
         id: tf_apply
         if: ${{ github.event.inputs.action == 'create' }}
         run: |
-          terraform apply -auto-approve
+          terraform apply -auto-approve -var="ecr_name=${{ needs.setup.outputs.ecr_name }}"
           REPO_URL=$(terraform output -raw repository_url 2>/dev/null || true)
           OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
           echo "Repository URL: $REPO_URL" | tee "$OUTPUT_FILE"
@@ -170,7 +174,7 @@ jobs:
       - name: Terraform Destroy (delete)
         if: ${{ github.event.inputs.action == 'delete' }}
         run: |
-          terraform destroy -auto-approve
+          terraform destroy -auto-approve -var="ecr_name=${{ needs.setup.outputs.ecr_name }}"
           OUTPUT_FILE="${{ needs.setup.outputs.output_file }}"
           echo "Terraform destroy completed" | tee "$OUTPUT_FILE"
 
@@ -216,7 +220,7 @@ jobs:
           echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Action | ${{ github.event.inputs.action }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| ECR Name | ${{ github.event.inputs.ecr_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ECR Name | ${{ needs.setup.outputs.ecr_name }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Repo URL | ${{ needs.ecr-action.outputs.repo_url || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Terraform Repo URL | ${{ needs.terraform-ecr.outputs.repo_url || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Repo Count | ${{ needs.ecr-action.outputs.repo_count || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
