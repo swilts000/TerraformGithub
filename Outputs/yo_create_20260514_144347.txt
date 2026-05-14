@@ -1,0 +1,16 @@
+{
+    "repository": {
+        "repositoryArn": "arn:aws:ecr:us-east-2:391119427586:repository/yo",
+        "registryId": "391119427586",
+        "repositoryName": "yo",
+        "repositoryUri": "391119427586.dkr.ecr.us-east-2.amazonaws.com/yo",
+        "createdAt": "2026-05-14T14:43:58.834000+00:00",
+        "imageTagMutability": "MUTABLE",
+        "imageScanningConfiguration": {
+            "scanOnPush": false
+        },
+        "encryptionConfiguration": {
+            "encryptionType": "AES256"
+        }
+    }
+}
