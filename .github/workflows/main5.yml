@@ -1,5 +1,5 @@
 name: AWS OIDC Test IIIII - Create, Count, Delete, Multiple Stage With Output with Terraform Option
-run-name: ${{ github.event.inputs.workflow_name || 'AWS OIDC Test IIII - Multiple Stage With Output' }}
+run-name: ${{ github.event.inputs.workflow_name || 'IIIII - Create, Count, Delete, Multiple Stage With Output with Terraform Option' }}
 
 on:
   workflow_dispatch:
