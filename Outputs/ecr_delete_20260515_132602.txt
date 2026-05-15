@@ -1,0 +1,10 @@
+{
+    "repository": {
+        "repositoryArn": "arn:aws:ecr:us-east-2:391119427586:repository/oidc-test-repoii",
+        "registryId": "391119427586",
+        "repositoryName": "oidc-test-repoii",
+        "repositoryUri": "391119427586.dkr.ecr.us-east-2.amazonaws.com/oidc-test-repoii",
+        "createdAt": "2026-05-12T15:13:22.197000+00:00",
+        "imageTagMutability": "MUTABLE"
+    }
+}
