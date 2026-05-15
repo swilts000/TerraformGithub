@@ -1,0 +1,17 @@
+Total ECR Repositories: 14
+
+Repository Names:
+oidc-test-repoii
+ter
+letsgo
+yo
+yoman
+okmin
+oidc-test-repo
+okman
+yofam
+pullyo
+mans
+anythere_test
+hey_man
+hello
