@@ -1,0 +1,10 @@
+{
+    "repository": {
+        "repositoryArn": "arn:aws:ecr:us-east-2:391119427586:repository/anythere_test",
+        "registryId": "391119427586",
+        "repositoryName": "anythere_test",
+        "repositoryUri": "391119427586.dkr.ecr.us-east-2.amazonaws.com/anythere_test",
+        "createdAt": "2026-05-12T17:45:42.094000+00:00",
+        "imageTagMutability": "MUTABLE"
+    }
+}
